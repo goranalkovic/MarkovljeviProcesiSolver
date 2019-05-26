@@ -1,0 +1,614 @@
+﻿@page "/"
+@using System.ComponentModel.Design
+@using System.Diagnostics
+@using System.Globalization
+@using System.Text.RegularExpressions
+@using MathNet.Numerics.LinearAlgebra
+@using MathNet.Numerics.LinearAlgebra.Double
+@using MathNet.Numerics.LinearAlgebra.Factorization
+
+<style>
+    #initTable td, #initTable th { text-align: center; }
+</style>
+
+@if (_currentStep == 1)
+{
+    <div class="columns is-vcentered">
+        <div class="column">
+            <h3 class="title is-3">Postavljanje zadatka</h3>
+        </div>
+
+        <div class="column is-narrow">
+            <SimpleButton Clicked="@AddTestData">Ubaci test podatke</SimpleButton>
+        </div>
+        <div class="column is-narrow">
+            <SimpleButton Color="Color.Primary" Clicked="@NextStep" IsDisabled="@(!_step2allowed)">Sljedeći korak</SimpleButton>
+        </div>
+    </div>
+
+    <Tabs SelectedTabChanged="@SetupTabChanged" class="is-centered">
+        <Tab Name="setup1" IsActive="@(setupSelectedTab == "setup1")">
+            <span class="icon is-small">
+                <i class="fas fa-step-backward" aria-hidden="true"></i>
+            </span>
+            <span>Prodaja u prethodnom razdoblju</span>
+        </Tab>
+        <Tab Name="setup2" IsActive="@(setupSelectedTab == "setup2")">
+            <span class="icon is-small">
+                <i class="fas fa-sort" aria-hidden="true"></i>
+            </span>
+            <span>Promjene količine prodaje</span>
+        </Tab>
+    </Tabs>
+    <TabsContent ref="setupSelectedTabContent">
+        <TabPanel IsActive="@(setupSelectedTab == "setup1")">
+            <Fields>
+                <Field IsHorizontal="true">
+                    <FieldLabel>Mjesec</FieldLabel>
+                    <FieldBody>
+                        <SelectEdit SelectedValue="@previousPeriodNumber" SelectedValueChanged="@PeriodSelected">
+                            <SelectItem Value="0">siječanj</SelectItem>
+                            <SelectItem Value="1">veljača</SelectItem>
+                            <SelectItem Value="2">ožujak</SelectItem>
+                            <SelectItem Value="3">travanj</SelectItem>
+                            <SelectItem Value="4">svibanj</SelectItem>
+                            <SelectItem Value="5">lipanj</SelectItem>
+                            <SelectItem Value="6">srpanj</SelectItem>
+                            <SelectItem Value="7">kolovoz</SelectItem>
+                            <SelectItem Value="8">rujan</SelectItem>
+                            <SelectItem Value="9">listopad</SelectItem>
+                            <SelectItem Value="10">studeni</SelectItem>
+                            <SelectItem Value="11">prosinac</SelectItem>
+                        </SelectEdit>
+                    </FieldBody>
+                </Field>
+                <Field IsHorizontal="true">
+                    <FieldLabel>Proizvod A</FieldLabel>
+                    <FieldBody>
+                        <TextEdit bind-Text="@PreviousA"/>
+                    </FieldBody>
+                </Field>
+                <Field IsHorizontal="true">
+                    <FieldLabel>Proizvod B</FieldLabel>
+                    <FieldBody>
+                        <TextEdit bind-Text="@PreviousB"/>
+                    </FieldBody>
+                </Field>
+                <Field IsHorizontal="true">
+                    <FieldLabel>Proizvod C</FieldLabel>
+                    <FieldBody>
+                        <TextEdit bind-Text="@PreviousC"/>
+                    </FieldBody>
+                </Field>
+            </Fields>
+        </TabPanel>
+        <TabPanel IsActive="@(setupSelectedTab == "setup2")">
+            <div class="columns is-variable is-1 is-centered">
+                <div class="column is-vcentered is-narrow">U prethodnom periodu proizvod</div>
+                <div class="column is-vcentered is-narrow">
+                    <SelectEdit SelectedValue="@selectedProduct" SelectedValueChanged="@ProductSelected">
+                        <SelectItem Value="0">A</SelectItem>
+                        <SelectItem Value="1">B</SelectItem>
+                        <SelectItem Value="2">C</SelectItem>
+                    </SelectEdit>
+                </div>
+                <div class="column is-vcentered is-narrow">je</div>
+                <div class="column is-vcentered is-narrow">
+                    <SelectEdit bind-SelectedValue="@selectedMoreLess">
+                        <SelectItem Value="0">povećao</SelectItem>
+                        <SelectItem Value="1">smanjio</SelectItem>
+                    </SelectEdit>
+                </div>
+                <div class="column is-vcentered is-narrow">količinu prodaje u odnosu na proizvod</div>
+                <div class="column is-vcentered is-narrow">
+                    <SelectEdit SelectedValue="@selectedProductToCompare" bind-SelectedValue="@selectedProductToCompare">
+                        <SelectItem Value="-1"></SelectItem>
+                        @if (selectedProduct != 0)
+                        {
+                            <SelectItem Value="0">A</SelectItem>
+                        }
+                        /**/
+                        /**/
+                        /**/
+                        /**/
+                        @if (selectedProduct != 1)
+                        {
+                            <SelectItem Value="1">B</SelectItem>
+                        }
+                        /**/
+                        /**/
+                        /**/
+                        /**/
+                        @if (selectedProduct != 2)
+                        {
+                            <SelectItem Value="2">C</SelectItem>
+                        }
+                        /**/
+                        /**/
+                        /**/
+                        /**/
+                    </SelectEdit>
+                </div>
+                <div class="column is-vcentered is-narrow">za</div>
+                <div class="column is-vcentered is-narrow">
+                    <NumericEdit TValue="int" bind-Value="@productPieces"/>
+                </div>
+                <div class="column is-vcentered is-narrow">komad(a).</div>
+                <div class="column is-vcentered is-narrow">
+                    <SimpleButton Clicked="@UpdateMatrix" Color="Color.Primary">
+                        <span>
+                            <i class="fas fa-sync-alt" aria-hidden="true"></i>
+                        </span> <span>Ažuriraj</span>
+                    </SimpleButton>
+                </div>
+            </div>
+
+        </TabPanel>
+
+    </TabsContent>
+
+    <hr/>
+
+    <div class="columns is-centered" style="padding: 3rem 0;">
+        <div class="column is-narrow">
+            <table class="table is-bordered" id="initTable">
+                <tr>
+                    <th rowspan="2">Proizvod</th>
+                    <th rowspan="2">Prodana<br/>količina<br/>@(GetMonthName(previousPeriodNumber))</th>
+                    <th colspan="3">Smanjenje - prijelaz na</th>
+                    <th rowspan="2">Lojalni<br/>kupci</th>
+                    <th colspan="3">Povećanje - prijelaz od</th>
+                    <th rowspan="2">Prodana<br/>količina<br/>@(GetMonthName(previousPeriodNumber + 1))</th>
+                </tr>
+                <tr>
+                    <td>A</td>
+                    <td>B</td>
+                    <td>C</td>
+                    <td>A</td>
+                    <td>B</td>
+                    <td>C</td>
+                </tr>
+                <tr>
+                    <td>A</td>
+                    <td>@_productPreviousMatrix[0, 0]</td>
+                    <td>@_productTransitionMatrix[0, 0]</td>
+                    <td>@_productTransitionMatrix[0, 1]</td>
+                    <td>@_productTransitionMatrix[0, 2]</td>
+                    <td>@LoyalA</td>
+                    <td>@_productTransitionMatrix[0, 0]</td>
+                    <td>@_productTransitionMatrix[1, 0]</td>
+                    <td>@_productTransitionMatrix[2, 0]</td>
+                    <td>@NextA</td>
+                </tr>
+                <tr>
+                    <td>B</td>
+                    <td>@_productPreviousMatrix[1, 0]</td>
+                    <td>@_productTransitionMatrix[1, 0]</td>
+                    <td>@_productTransitionMatrix[1, 1]</td>
+                    <td>@_productTransitionMatrix[1, 2]</td>
+                    <td>@LoyalB</td>
+                    <td>@_productTransitionMatrix[0, 1]</td>
+                    <td>@_productTransitionMatrix[1, 1]</td>
+                    <td>@_productTransitionMatrix[2, 1]</td>
+                    <td>@NextB</td>
+                </tr>
+                <tr>
+                    <td>C</td>
+                    <td>@_productPreviousMatrix[2, 0]</td>
+                    <td>@_productTransitionMatrix[2, 0]</td>
+                    <td>@_productTransitionMatrix[2, 1]</td>
+                    <td>@_productTransitionMatrix[2, 2]</td>
+                    <td>@LoyalC</td>
+                    <td>@_productTransitionMatrix[0, 2]</td>
+                    <td>@_productTransitionMatrix[1, 2]</td>
+                    <td>@_productTransitionMatrix[2, 2]</td>
+                    <td>@NextC</td>
+                </tr>
+                <tr>
+                    <td colspan="9" style="text-align: right;">
+                        <b>Ukupno</b>
+                    </td>
+                    <td>
+                        <b>@SumNext</b>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+}
+else if (_currentStep == 2)
+{
+    <div class="columns is-vcentered">
+        <div class="column">
+            <h3 class="title is-3">Matrica prijelaznih vrijednosti</h3>
+        </div>
+        <div class="column is-narrow">
+            <div class="columns is-variable is-1 is-vcentered">
+                <div class="column">
+                    <SimpleButton Color="Color.Secondary" IsOutline="true" Clicked="@PreviousStep">Prethodni korak</SimpleButton>
+                </div>
+                <div class="column">
+                    <SimpleButton Color="Color.Primary" Clicked="@NextStep">Sljedeći korak</SimpleButton>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p>P = </p>
+    <table class="matrix">
+        <tr>
+            <td>@($"{_productForecastingOriginalMatrix[0, 0]:F3}")</td>
+            <td>@($"{_productForecastingOriginalMatrix[0, 1]:F3}")</td>
+            <td>@($"{_productForecastingOriginalMatrix[0, 2]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_productForecastingOriginalMatrix[1, 0]:F3}")</td>
+            <td>@($"{_productForecastingOriginalMatrix[1, 1]:F3}")</td>
+            <td>@($"{_productForecastingOriginalMatrix[1, 2]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_productForecastingOriginalMatrix[2, 0]:F3}")</td>
+            <td>@($"{_productForecastingOriginalMatrix[2, 1]:F3}")</td>
+            <td>@($"{_productForecastingOriginalMatrix[2, 2]:F3}")</td>
+        </tr>
+    </table>
+
+    <p>A_0 = </p>
+    <table class="matrix">
+        <tr>
+            <td>@($"{_productSalesStructureMatrix[0, 0]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_productSalesStructureMatrix[1, 0]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_productSalesStructureMatrix[2, 0]:F3}")</td>
+        </tr>
+    </table>
+
+    <p>P_2 = </p>
+    <table class="matrix">
+        <tr>
+            <td>@($"{_newProductForecastingMatrix[0, 0]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_newProductForecastingMatrix[1, 0]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_newProductForecastingMatrix[2, 0]:F3}")</td>
+        </tr>
+    </table>
+
+    <p>Stabilno stanje = </p>
+    <table class="matrix">
+        <tr>
+            <td>@($"{_stableStateMatrix[0, 0]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_stableStateMatrix[1, 0]:F3}")</td>
+        </tr>
+        <tr>
+            <td>@($"{_stableStateMatrix[2, 0]:F3}")</td>
+        </tr>
+    </table>
+}
+else if (_currentStep == 3)
+{
+    <div class="columns is-vcentered">
+        <div class="column">
+            <h3 class="title is-3">Predviđanja u budućim razdobljima</h3>
+        </div>
+        <div class="column is-narrow">
+            <div class="columns is-variable is-1">
+                <div class="column">
+                    <SimpleButton Color="Color.Secondary" IsOutline="true" Clicked="@PreviousStep">Prethodni korak</SimpleButton>
+                </div>
+                <div class="column">
+                    <SimpleButton Color="Color.Success" Clicked="@NextStep">Dovrši</SimpleButton>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else if (_currentStep == 4)
+{
+    <div class="columns is-vcentered">
+        <div class="column">
+            <h3 class="title is-3">Stabilno stanje</h3>
+        </div>
+        <div class="column is-narrow">
+            <SimpleButton Color="Color.Secondary" Size="ButtonSize.Small" IsOutline="true" Clicked="@(() => _currentStep = 1)">Novi zadatak</SimpleButton>
+        </div>
+    </div>
+}
+
+@functions
+{
+
+    #region Common
+
+    Matrix<double> _productTransitionMatrix;
+    Matrix<double> _productPreviousMatrix;
+    Matrix<double> _productForecastingOriginalMatrix;
+    Matrix<double> _productSalesStructureMatrix;
+    Matrix<double> _newProductForecastingMatrix;
+    Matrix<double> _stableStateMatrix;
+
+
+    protected override void OnInit()
+    {
+        _productTransitionMatrix = Matrix<double>.Build.Dense(3, 3);
+        _productForecastingOriginalMatrix = Matrix<double>.Build.Dense(3, 3);
+        _productPreviousMatrix = Matrix<double>.Build.Dense(3, 1);
+        _productSalesStructureMatrix = Matrix<double>.Build.Dense(3, 1);
+        _stableStateMatrix = Matrix<double>.Build.Dense(3, 1);
+    //_newProductForecastingMatrix = Matrix<double>.Build.Dense(3, 1);
+    }
+
+    string GetMonthName(int month)
+    {
+        switch (month)
+        {
+            case 0:
+                return "siječanj";
+            case 1:
+                return "veljača";
+            case 2:
+                return "ožujak";
+            case 3:
+                return "travanj";
+            case 4:
+                return "svibanj";
+            case 5:
+                return "lipanj";
+            case 6:
+                return "srpanj";
+            case 7:
+                return "kolovoz";
+            case 8:
+                return "rujan";
+            case 9:
+                return "listopad";
+            case 10:
+                return "studeni";
+            case 11:
+                return "prosinac";
+            case 12:
+                return "siječanj";
+            default:
+                return "";
+        }
+    }
+
+    #endregion
+
+    #region Page switching
+
+    private int _currentStep = 1;
+        private const int MaxStep = 4;
+        private const int MinStep = 1;
+
+    void NextStep()
+    {
+        if (_currentStep + 1 <= MaxStep)
+        {
+            _currentStep++;
+        }
+        CalculateOriginalSalesMatrix();
+        CalculateOriginalForecastingMatrix();
+        CalculateStableState();
+    }
+
+    void PreviousStep()
+    {
+        if (_currentStep - 1 >= MinStep)
+        {
+            _currentStep--;
+        }
+        CalculateOriginalSalesMatrix();
+        CalculateOriginalForecastingMatrix();
+        CalculateStableState();
+    }
+
+    void AddTestData()
+    {
+        _productPreviousMatrix[0, 0] = 130;
+        _productPreviousMatrix[1, 0] = 100;
+        _productPreviousMatrix[2, 0] = 70;
+
+        _previousA = "130";
+        _previousB = "100";
+        _previousC = "70";
+
+        _productTransitionMatrix[0, 1] = 15;
+        _productTransitionMatrix[0, 2] = 10;
+
+        _productTransitionMatrix[1, 0] = 7;
+        _productTransitionMatrix[1, 2] = 9;
+
+        _productTransitionMatrix[2, 0] = 3;
+        _productTransitionMatrix[2, 1] = 6;
+
+        CalculateOriginalForecastingMatrix();
+        CalculateOriginalSalesMatrix();
+        StateHasChanged();
+    }
+
+    #endregion
+
+    #region Postavljanje zadatka
+
+    bool _step2allowed => LoyalA > 0 && LoyalB > 0 && LoyalC > 0 && NextA > 0 && NextB > 0 && NextC > 0 && SumNext > 0 && LoyalA != _productPreviousMatrix[0, 0] && LoyalB != _productPreviousMatrix[1,0] && LoyalC != _productPreviousMatrix[2,0];
+
+    int previousPeriodNumber = 2;
+
+    int selectedProduct = 0;
+    int selectedMoreLess = 0;
+    int selectedProductToCompare = -1;
+    int productPieces = 0;
+
+    void UpdateMatrix()
+    {
+        Debug.WriteLine($"Odabran proizvod {selectedProduct}");
+        Debug.WriteLine($"Drugi proizvod {selectedProductToCompare}");
+        Debug.WriteLine($"Komada: {productPieces}");
+        Debug.WriteLine($"+- {selectedMoreLess}");
+
+        if (selectedMoreLess == 1) // povećanje
+        {
+            _productTransitionMatrix[selectedProduct, selectedProductToCompare] = productPieces;
+        }
+        else // smanjenje
+        {
+            _productTransitionMatrix[selectedProductToCompare, selectedProduct] = productPieces;
+        }
+        StateHasChanged();
+
+    //selectedProduct = 0;
+    //selectedMoreLess = 0;
+    //selectedProductToCompare = 0;
+    //productPieces = 0;
+    }
+
+    void ProductSelected(int value)
+    {
+        selectedProduct = value;
+        selectedProductToCompare = -1;
+        StateHasChanged();
+    }
+
+    void PeriodSelected(int value)
+    {
+        previousPeriodNumber = value;
+        StateHasChanged();
+    }
+
+    private string setupSelectedTab = "setup1";
+    private TabsContent setupSelectedTabContent;
+
+    private void SetupTabChanged(string name)
+    {
+        setupSelectedTab = name;
+        setupSelectedTabContent.SelectPanel(name);
+    }
+
+    void ProductAPreviousChanged(string value)
+    {
+        _productPreviousMatrix[0, 0] = double.Parse(value);
+        StateHasChanged();
+    }
+
+    void ProductBPreviousChanged(string value)
+    {
+        _productPreviousMatrix[1, 0] = double.Parse(value);
+        StateHasChanged();
+    }
+
+    void ProductCPreviousChanged(string value)
+    {
+        _productPreviousMatrix[2, 0] = double.Parse(value);
+        StateHasChanged();
+    }
+
+    string _previousA = "";
+
+    string PreviousA
+    {
+        get => _previousA;
+        set
+        {
+            _previousA = value;
+            _productPreviousMatrix[0, 0] = double.Parse(value == "" ? "0" : value);
+        }
+    }
+
+    string _previousB = "";
+
+    string PreviousB
+    {
+        get => _previousB;
+        set
+        {
+            _previousB = value;
+            _productPreviousMatrix[1, 0] = double.Parse(value == "" ? "0" : value);
+        }
+    }
+
+    string _previousC = "";
+
+    string PreviousC
+    {
+        get => _previousC;
+        set
+        {
+            _previousC = value;
+            _productPreviousMatrix[2, 0] = double.Parse(value == "" ? "0" : value);
+        }
+    }
+
+    double LoyalA => _productPreviousMatrix[0, 0] - _productTransitionMatrix[0, 1] - _productTransitionMatrix[0, 2];
+    double LoyalB => _productPreviousMatrix[1, 0] - _productTransitionMatrix[1, 0] - _productTransitionMatrix[1, 2];
+    double LoyalC => _productPreviousMatrix[2, 0] - _productTransitionMatrix[2, 0] - _productTransitionMatrix[2, 1];
+
+    double NextA => LoyalA + _productTransitionMatrix[1, 0] + _productTransitionMatrix[2, 0];
+    double NextB => LoyalB + _productTransitionMatrix[0, 1] + _productTransitionMatrix[2, 1];
+    double NextC => LoyalC + _productTransitionMatrix[0, 2] + _productTransitionMatrix[1, 2];
+
+    double SumNext => NextA + NextB + NextC;
+
+    #endregion
+
+    #region Matrica prijelaznih vrijednosti
+
+    void CalculateOriginalForecastingMatrix()
+    {
+        _productForecastingOriginalMatrix[0, 0] = LoyalA / _productPreviousMatrix[0, 0];
+        _productForecastingOriginalMatrix[1, 0] = _productTransitionMatrix[0, 1] / _productPreviousMatrix[0, 0];
+        _productForecastingOriginalMatrix[2, 0] = _productTransitionMatrix[0, 2] / _productPreviousMatrix[0, 0];
+
+        _productForecastingOriginalMatrix[0, 1] = _productTransitionMatrix[1, 0] / _productPreviousMatrix[1, 0];
+        _productForecastingOriginalMatrix[1, 1] = LoyalB / _productPreviousMatrix[1, 0];
+        _productForecastingOriginalMatrix[2, 1] = _productTransitionMatrix[1, 2] / _productPreviousMatrix[1, 0];
+
+        _productForecastingOriginalMatrix[0, 2] = _productTransitionMatrix[2, 0] / _productPreviousMatrix[2, 0];
+        _productForecastingOriginalMatrix[1, 2] = _productTransitionMatrix[2, 1] / _productPreviousMatrix[2, 0];
+        _productForecastingOriginalMatrix[2, 2] = LoyalC / _productPreviousMatrix[2, 0];
+    }
+
+    void CalculateOriginalSalesMatrix()
+    {
+        _productSalesStructureMatrix[0, 0] = NextA / SumNext;
+        _productSalesStructureMatrix[1, 0] = NextB / SumNext;
+        _productSalesStructureMatrix[2, 0] = NextC / SumNext;
+
+        _newProductForecastingMatrix = _productForecastingOriginalMatrix * _productSalesStructureMatrix;
+
+
+      
+    }
+
+    void CalculateStableState()
+    {
+        var A = Matrix<double>.Build.DenseOfArray(new double[,]
+        {
+            {_productForecastingOriginalMatrix[0, 0] - 1, _productForecastingOriginalMatrix[0, 1], _productForecastingOriginalMatrix[0, 2]},
+            {_productForecastingOriginalMatrix[1, 0], _productForecastingOriginalMatrix[1, 1] - 1, _productForecastingOriginalMatrix[1, 2]},
+            {_productForecastingOriginalMatrix[2, 0], _productForecastingOriginalMatrix[2, 1], _productForecastingOriginalMatrix[2, 2] - 1},
+            {1, 1, 1}
+        });
+        var b = Vector<double>.Build.Dense(new double[] {1, 1, 1, 1});
+        _stableStateMatrix = A.Solve(b).ToColumnMatrix();
+    }
+
+
+    #endregion
+
+    #region Predviđanja u budućim razdobljima
+
+    #endregion
+
+    #region Stabilno stanje
+
+    #endregion
+
+}
