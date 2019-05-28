@@ -1,4 +1,5 @@
 ﻿@page "/"
+@using System.Collections.Generic
 @using MathNet.Numerics.LinearAlgebra
 
 <style>
@@ -95,7 +96,7 @@
 </div>
 
 <div class="columns is-centered is-variable is-5">
-    <div class="column">
+    <div class="column is-narrow">
         <h5 class="title is-5">Prodaja u prethodnom razdoblju</h5>
         <div style="max-width: 7.5rem;">
             <Field>
@@ -137,6 +138,29 @@
             </Field>
         </div>
     </div>
+    <div class="column is-narrow">
+        <h5 class="title is-5">Prodaja u sljedećem razdoblju</h5>
+        <div style="max-width: 7.5rem;">
+            <Field>
+                <FieldLabel>Proizvod A</FieldLabel>
+                <FieldBody>
+                    <TextEdit bind-Text="@NextARef"/>
+                </FieldBody>
+            </Field>
+            <Field>
+                <FieldLabel>Proizvod B</FieldLabel>
+                <FieldBody>
+                    <TextEdit bind-Text="@NextBRef"/>
+                </FieldBody>
+            </Field>
+            <Field>
+                <FieldLabel>Proizvod C</FieldLabel>
+                <FieldBody>
+                    <TextEdit bind-Text="@NextCRef"/>
+                </FieldBody>
+            </Field>
+        </div>
+    </div>
     <div class="column">
         <h5 class="title is-5">Promjene količine prodaje</h5>
         <div class="columns is-variable is-1 is-vcentered">
@@ -150,7 +174,7 @@
             </div>
             <div class="column is-vcentered is-narrow">je</div>
             <div class="column is-vcentered is-narrow">
-                <SelectEdit bind-SelectedValue="@selectedMoreLess">
+                <SelectEdit bind-SelectedValue="@_selectedMoreLess">
                     <SelectItem Value="0">povećao</SelectItem>
                     <SelectItem Value="1">smanjio</SelectItem>
                 </SelectEdit>
@@ -231,7 +255,7 @@
 
         <div class="column is-narrow">
             <h5 class="title is-5">Matrica prijelaznih vrijednosti</h5>
-            <p>P = </p>
+            <p class="mono-font">P</p>
             <table class="matrix">
                 <tr>
                     <td>@($"{_productForecastingOriginalMatrix[0, 0]:F3}")</td>
@@ -250,37 +274,9 @@
                 </tr>
             </table>
         </div>
-        <div class="column">
-            <h5 class="title is-5">Predviđanje ponašanja tržišta u budućim razdobljima</h5>
-            <p>A_0 = </p>
-            <table class="matrix">
-                <tr>
-                    <td>@($"{_productSalesStructureMatrix[0, 0]:F3}")</td>
-                </tr>
-                <tr>
-                    <td>@($"{_productSalesStructureMatrix[1, 0]:F3}")</td>
-                </tr>
-                <tr>
-                    <td>@($"{_productSalesStructureMatrix[2, 0]:F3}")</td>
-                </tr>
-            </table>
-
-            <p>P_2 = </p>
-            <table class="matrix">
-                <tr>
-                    <td>@($"{_newProductForecastingMatrix[0, 0]:F3}")</td>
-                </tr>
-                <tr>
-                    <td>@($"{_newProductForecastingMatrix[1, 0]:F3}")</td>
-                </tr>
-                <tr>
-                    <td>@($"{_newProductForecastingMatrix[2, 0]:F3}")</td>
-                </tr>
-            </table>
-        </div>
         <div class="column is-narrow">
             <h5 class="title is-5">Stabilno stanje</h5>
-            <p>Stabilno stanje = </p>
+            <p class="mono-font">A<sub>s</sub></p>
             <table class="matrix">
                 <tr>
                     <td>@($"{_stableStateMatrix[0, 0]:F3}")</td>
@@ -293,6 +289,50 @@
                 </tr>
             </table>
         </div>
+        <div class="column">
+
+            <h5 class="title is-5">Predviđanje ponašanja tržišta u budućim razdobljima</h5>
+
+            <div class="columns">
+               
+     
+                <div class="columns is-vcentered is-variable is-2">
+                    <div class="column">
+                        <SimpleButton IsDisabled="@(_nextForecastPeriodOffset < 1)" Clicked="@(() => { _nextForecastPeriodOffset -= _nextForecastPeriodOffset >= 1 ? 1 : 0; })">
+                            <span class="icon">
+                                <i class="fas fa-chevron-left"></i>
+                            </span>
+                        </SimpleButton>
+                    </div>
+                    <div class="column">
+                        <div class="column is-vcentered">
+                            <p class="mono-font">A<sub>@(_nextForecastPeriodOffset)</sub></p>
+                            <table class="matrix">
+                                <tr>
+                                    <td>@($"{_futurePeriodMatrices[_nextForecastPeriodOffset][0, 0]:F3}")</td>
+                                </tr>
+                                <tr>
+                                    <td>@($"{_futurePeriodMatrices[_nextForecastPeriodOffset][1, 0]:F3}")</td>
+                                </tr>
+                                <tr>
+                                    <td>@($"{_futurePeriodMatrices[_nextForecastPeriodOffset][2, 0]:F3}")</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <SimpleButton IsDisabled="@(_nextForecastPeriodOffset > 47)" Clicked="@(() => { _nextForecastPeriodOffset += _nextForecastPeriodOffset <= 47 ? 1 : 0; })">
+                            <span class="icon">
+                                <i class="fas fa-chevron-right"></i>
+                            </span>
+                        </SimpleButton>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+       
     </div>
 }
 
@@ -303,10 +343,13 @@
 
     Matrix<double> _productTransitionMatrix;
     Matrix<double> _productPreviousMatrix;
+    Matrix<double> _productNextMatrix;
     Matrix<double> _productForecastingOriginalMatrix;
     Matrix<double> _productSalesStructureMatrix;
     Matrix<double> _newProductForecastingMatrix;
     Matrix<double> _stableStateMatrix;
+    List<Matrix<double>> _futurePeriodMatrices = new List<Matrix<double>>();
+    int _nextForecastPeriodOffset = 0;
 
     private Modal _manualEditModal;
 
@@ -325,6 +368,7 @@
         _productTransitionMatrix = Matrix<double>.Build.Dense(3, 3);
         _productForecastingOriginalMatrix = Matrix<double>.Build.Dense(3, 3);
         _productPreviousMatrix = Matrix<double>.Build.Dense(3, 1);
+        _productNextMatrix = Matrix<double>.Build.Dense(3, 1);
         _productSalesStructureMatrix = Matrix<double>.Build.Dense(3, 1);
         _stableStateMatrix = Matrix<double>.Build.Dense(3, 1);
         _newProductForecastingMatrix = Matrix<double>.Build.Dense(3, 1);
@@ -371,15 +415,26 @@
 
     void AddTestData()
     {
+        _futurePeriodMatrices.Clear();
+        _nextForecastPeriodOffset = 0;
+
         _previousPeriodNumber = 1;
 
         _productPreviousMatrix[0, 0] = 130;
         _productPreviousMatrix[1, 0] = 100;
         _productPreviousMatrix[2, 0] = 70;
 
+        _productNextMatrix[0, 0] = 115;
+        _productNextMatrix[1, 0] = 105;
+        _productNextMatrix[2, 0] = 80;
+
         _previousA = "130";
         _previousB = "100";
         _previousC = "70";
+
+        _nextARef = "115";
+        _nextBRef = "105";
+        _nextCRef = "80";
 
         _productTransitionMatrix[0, 1] = 15;
         _productTransitionMatrix[0, 2] = 10;
@@ -396,13 +451,24 @@
 
     void ResetData()
     {
+        _futurePeriodMatrices.Clear();
+        _nextForecastPeriodOffset = 0;
+
         _productPreviousMatrix[0, 0] = 0;
         _productPreviousMatrix[1, 0] = 0;
         _productPreviousMatrix[2, 0] = 0;
 
+        _productNextMatrix[0, 0] = 0;
+        _productNextMatrix[1, 0] = 0;
+        _productNextMatrix[2, 0] = 0;
+
         _previousA = "0";
         _previousB = "0";
         _previousC = "0";
+
+        _nextARef = "0";
+        _nextBRef = "0";
+        _nextCRef = "0";
 
         _productTransitionMatrix[0, 1] = 0;
         _productTransitionMatrix[0, 2] = 0;
@@ -414,12 +480,12 @@
         _productTransitionMatrix[2, 1] = 0;
 
         _selectedProduct = 0;
-        selectedMoreLess = 0;
+        _selectedMoreLess = 0;
         _selectedProductToCompare = -1;
         _productPieces = 0;
         _previousPeriodNumber = 0;
 
-        //SolveTask();
+    //SolveTask();
         StateHasChanged();
     }
 
@@ -427,18 +493,18 @@
 
     #region Postavljanje zadatka
 
-    bool _isDataOk => LoyalA > 0 && LoyalB > 0 && LoyalC > 0 && NextA > 0 && NextB > 0 && NextC > 0 && SumNext > 0 && LoyalA != _productPreviousMatrix[0, 0] && LoyalB != _productPreviousMatrix[1, 0] && LoyalC != _productPreviousMatrix[2, 0];
+    bool _isDataOk => LoyalA > 0 && LoyalB > 0 && LoyalC > 0 && NextA > 0 && NextB > 0 && NextC > 0 && SumNext > 0 && LoyalA != _productPreviousMatrix[0, 0] && LoyalB != _productPreviousMatrix[1, 0] && LoyalC != _productPreviousMatrix[2, 0] && NextA == _productNextMatrix[0, 0] && NextB == _productNextMatrix[1, 0] && NextC == _productNextMatrix[2, 0];
 
     int _previousPeriodNumber = 0;
 
     int _selectedProduct;
-    int selectedMoreLess;
+    int _selectedMoreLess;
     int _selectedProductToCompare = -1;
     int _productPieces;
 
     void UpdateMatrix()
     {
-        if (selectedMoreLess == 1) // povećanje
+        if (_selectedMoreLess == 1) // povećanje
         {
             _productTransitionMatrix[_selectedProduct, _selectedProductToCompare] = _productPieces;
         }
@@ -463,12 +529,6 @@
         StateHasChanged();
     }
 
-    void ProductAPreviousChanged(string value)
-    {
-        _productPreviousMatrix[0, 0] = double.Parse(value);
-        StateHasChanged();
-        SolveTask();
-    }
 
     void SolveTask()
     {
@@ -477,21 +537,7 @@
         CalculateStableState();
         StateHasChanged();
     }
-
-    void ProductBPreviousChanged(string value)
-    {
-        _productPreviousMatrix[1, 0] = double.Parse(value);
-        StateHasChanged();
-        SolveTask();
-    }
-
-    void ProductCPreviousChanged(string value)
-    {
-        _productPreviousMatrix[2, 0] = double.Parse(value);
-        StateHasChanged();
-        SolveTask();
-    }
-
+    
     string _previousA = "";
 
     string PreviousA
@@ -525,6 +571,42 @@
         {
             _previousC = value;
             _productPreviousMatrix[2, 0] = double.Parse(value == "" ? "0" : value);
+        }
+    }
+
+    string _nextARef = "";
+
+    string NextARef
+    {
+        get => _nextARef;
+        set
+        {
+            _nextARef = value;
+            _productNextMatrix[0, 0] = double.Parse(value == "" ? "0" : value);
+        }
+    }
+
+    string _nextBRef = "";
+
+    string NextBRef
+    {
+        get => _nextBRef;
+        set
+        {
+            _nextBRef = value;
+            _productNextMatrix[0, 0] = double.Parse(value == "" ? "0" : value);
+        }
+    }
+
+    string _nextCRef = "";
+
+    string NextCRef
+    {
+        get => _nextCRef;
+        set
+        {
+            _nextCRef = value;
+            _productNextMatrix[0, 0] = double.Parse(value == "" ? "0" : value);
         }
     }
 
@@ -584,7 +666,12 @@
         _productSalesStructureMatrix[1, 0] = NextB / SumNext;
         _productSalesStructureMatrix[2, 0] = NextC / SumNext;
 
-        _newProductForecastingMatrix = _productForecastingOriginalMatrix * _productSalesStructureMatrix;
+        _futurePeriodMatrices.Add(_productSalesStructureMatrix);
+
+        for (var i = 0; i < 48; i++)
+        {
+            _futurePeriodMatrices.Add(_productForecastingOriginalMatrix * _futurePeriodMatrices[i]);
+        }
     }
 
     void CalculateStableState()
@@ -611,4 +698,3 @@
     #endregion
 
 }
-

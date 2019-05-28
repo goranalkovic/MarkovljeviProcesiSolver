@@ -15,9 +15,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Blazorise.Bulma" Version="0.7.3" />
-    <PackageReference Include="Blazorise.Icons.FontAwesome" Version="0.7.3" />
-    <PackageReference Include="MathNet.Numerics" Version="4.7.0" />
+    <PackageReference Include="Blazorise.Bulma" Version="0.7.4" />
+    <PackageReference Include="Blazorise.Icons.FontAwesome" Version="0.7.4" />
+    <PackageReference Include="MathNet.Numerics" Version="4.8.0-beta01" />
     <PackageReference Include="Microsoft.AspNetCore.Blazor" Version="3.0.0-preview5-19227-01" />
     <PackageReference Include="Microsoft.AspNetCore.Blazor.Build" Version="3.0.0-preview5-19227-01" PrivateAssets="all" />
     <PackageReference Include="Microsoft.AspNetCore.Blazor.DevServer" Version="3.0.0-preview5-19227-01" PrivateAssets="all" />
